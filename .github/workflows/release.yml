@@ -17,11 +17,19 @@ jobs:
         with:
           node-version: '20'
 
+      - name: Ensure zip is available
+        run: sudo apt-get update && sudo apt-get install -y zip
+
       - name: Create release zip
         run: |
           mkdir -p dist
           zip -r "dist/FTTH-Kalkulator-${{ github.ref_name }}.zip" \
             server.js package.json package-lock.json Dockerfile README.md CHANGELOG.md public/
+
+      - name: Generate SHA256 checksum
+        run: |
+          cd dist
+          sha256sum "FTTH-Kalkulator-${{ github.ref_name }}.zip" > "FTTH-Kalkulator-${{ github.ref_name }}.zip.sha256"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
@@ -30,6 +38,8 @@ jobs:
           name: FTTH Kalkulator ${{ github.ref_name }}
           files: |
             dist/FTTH-Kalkulator-${{ github.ref_name }}.zip
+            dist/FTTH-Kalkulator-${{ github.ref_name }}.zip.sha256
+          body_path: CHANGELOG.md
           draft: false
           prerelease: false
         env:
