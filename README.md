@@ -110,9 +110,22 @@ Jika perlu autentikasi, gunakan Personal Access Token (PAT) atau `gh auth login`
 - Changelog: lihat `CHANGELOG.md` di repo.
 
 ### Rilis Otomatis (CI)
-- Setiap push tag `v*` (mis. `v1.0.1`) akan memicu GitHub Actions untuk:
+- Setiap push tag `v*` (mis. `v1.0.1`) akan memicu GitHub Actions untuk: 
   - Membangun arsip ZIP berisi `server.js`, `package.json`, `Dockerfile`, `README.md`, `CHANGELOG.md`, dan folder `public/`.
   - Membuat Release di GitHub dengan nama `FTTH Kalkulator <tag>` dan melampirkan ZIP sebagai asset.
 - Cara memicu:
-  - Pastikan branch `main` bersih lalu dorong tag: `git tag v1.0.1 -m "FTTH Kalkulator v1.0.1" && git push origin v1.0.1`.
+  - Pastikan `main` bersih dan dorong tag: `git tag v1.0.1 -m \"FTTH Kalkulator v1.0.1\" && git push origin v1.0.1`.
   - Workflow: `.github/workflows/release.yml`.
+
+### Auto Install (Ubuntu 22)
+- Unduh dan jalankan skrip:
+  - `curl -O https://raw.githubusercontent.com/erlangh/ftth-kalkulator/main/scripts/install_ubuntu_22.sh`
+  - `chmod +x install_ubuntu_22.sh`
+  - `sudo ./install_ubuntu_22.sh --tag latest --port 5173 --dir /opt/ftth-kalkulator --user ubuntu`
+- Opsi:
+  - `--tag latest` untuk versi terbaru atau `--tag vX.Y.Z` untuk versi spesifik.
+  - `--source release|git` default `release`.
+- Service:
+  - `sudo systemctl status ftth-kalkulator`
+  - `sudo systemctl restart ftth-kalkulator`
+  - `sudo journalctl -u ftth-kalkulator -f`

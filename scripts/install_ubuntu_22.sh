@@ -45,8 +45,18 @@ while [[ ${1:-} ]]; do
   esac
 done
 
+if [[ "$TAG" == "latest" ]]; then
+  log "Mendeteksi tag rilis terbaru dari GitHub..."
+  TAG=$(curl -s "https://api.github.com/repos/$REPO/releases/latest" | grep -m1 '"tag_name"' | sed -E 's/.*"tag_name":\s*"([^"]+)".*/\1/')
+  if [[ -z "$TAG" ]]; then
+    err "Gagal mendeteksi tag terbaru dari API GitHub"
+    exit 1
+  fi
+  log "Tag terbaru: $TAG"
+fi
+
 if [[ -z "$TAG" ]]; then
-  err "TAG tidak boleh kosong. Gunakan --tag vX.Y.Z"
+  err "TAG tidak boleh kosong. Gunakan --tag vX.Y.Z atau --tag latest"
   exit 1
 fi
 
