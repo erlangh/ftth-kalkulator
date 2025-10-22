@@ -52,6 +52,8 @@ const summaryContent = document.getElementById('summaryContent');
 const exportXlsxBtn = document.getElementById('exportXlsxBtn');
 const odcSnapModeEl = document.getElementById('odcSnapMode');
 const showLabelsEl = document.getElementById('showLabels');
+const odcLabelPrefixEl = document.getElementById('odcLabelPrefix');
+const odpLabelPrefixEl = document.getElementById('odpLabelPrefix');
 
 poleTypeEl.addEventListener('change', () => state.material.poleType = poleTypeEl.value);
 poleSpacingEl.addEventListener('change', () => state.material.poleSpacing = Number(poleSpacingEl.value));
@@ -75,6 +77,25 @@ if (showLabelsEl) showLabelsEl.addEventListener('change', () => {
   state.showLabels = !!showLabelsEl.checked;
 });
 
+// Inisialisasi dan binding prefix label ODC/ODP
+state.odcLabelPrefix = typeof state.odcLabelPrefix === 'string' ? state.odcLabelPrefix : (odcLabelPrefixEl && odcLabelPrefixEl.value ? odcLabelPrefixEl.value : 'ODC-');
+state.odpLabelPrefix = typeof state.odpLabelPrefix === 'string' ? state.odpLabelPrefix : (odpLabelPrefixEl && odpLabelPrefixEl.value ? odpLabelPrefixEl.value : 'ODP-');
+if (odcLabelPrefixEl) odcLabelPrefixEl.value = state.odcLabelPrefix;
+if (odpLabelPrefixEl) odpLabelPrefixEl.value = state.odpLabelPrefix;
+if (odcLabelPrefixEl) odcLabelPrefixEl.addEventListener('input', () => {
+  state.odcLabelPrefix = odcLabelPrefixEl.value || 'ODC-';
+  if (state.showLabels) {
+    if (state.uploaded) renderUploaded();
+    if (state.odps && state.odps.length) renderComputed();
+  }
+});
+if (odpLabelPrefixEl) odpLabelPrefixEl.addEventListener('input', () => {
+  state.odpLabelPrefix = odpLabelPrefixEl.value || 'ODP-';
+  if (state.showLabels) {
+    if (state.uploaded) renderUploaded();
+    if (state.odps && state.odps.length) renderComputed();
+  }
+});
 function populateFeederNameOptions(geojson) {
   if (!feederNameSelect) return;
   const feats = geojson.features || [];
@@ -183,7 +204,7 @@ function renderUploaded() {
     pointToLayer: (f, latlng) => L.circleMarker(latlng, { radius: 6, color: '#004aad', fillColor: '#4ea3ff', fillOpacity: 0.8 }),
     onEachFeature: (f, layer) => {
       if (state.showLabels) {
-        layer.bindTooltip(`ODC ${++odcIdx}`, { permanent: true, direction: 'top', className: 'label-s' });
+        layer.bindTooltip(`${state.odcLabelPrefix || 'ODC-'}${++odcIdx}`, { permanent: true, direction: 'top', className: 'label-s' });
       }
     }
   }).addTo(map);
@@ -209,7 +230,7 @@ function renderComputed() {
     pointToLayer: (f, latlng) => L.circleMarker(latlng, { radius: 5, color: '#0b5', fillColor: '#7fda8f', fillOpacity: 0.9 }),
     onEachFeature: (f, layer) => {
       if (state.showLabels) {
-        layer.bindTooltip(`ODP ${++odpIdx}`, { permanent: true, direction: 'top', className: 'label-s' });
+        layer.bindTooltip(`${state.odpLabelPrefix || 'ODP-'}${++odpIdx}`, { permanent: true, direction: 'top', className: 'label-s' });
       }
     }
   }).addTo(map);
