@@ -298,7 +298,7 @@ function computePoles() {
   const poles = [];
   let feederTotal = 0;
 
-  state.feederLines.forEach(line => {
+  state.feederLines.forEach((line, lineIdx) => {
     const geom = line.geometry;
     const lineStr = geom.type === 'LineString' ? geom : turf.flatten(line).features[0].geometry;
     const length = turf.length({ type: 'Feature', geometry: lineStr }, { units: 'kilometers' });
@@ -309,7 +309,7 @@ function computePoles() {
     for (let i = 0; i <= count; i++) {
       const distKm = (i * spacing) / 1000;
       const pt = turf.along({ type: 'Feature', geometry: lineStr }, distKm, { units: 'kilometers' });
-      poles.push({ type: 'Feature', properties: { type: `pole_${state.material.poleType}m` }, geometry: pt.geometry });
+      poles.push({ type: 'Feature', properties: { type: `pole_${state.material.poleType}m`, lineIndex: lineIdx, locationKm: distKm }, geometry: pt.geometry });
     }
   });
 
@@ -348,29 +348,63 @@ function computeODPAndDistribution() {
     return { nearestPoint: best, lineFeature: bestLine };
   }
 
+  function nearestPole(pointFeature) {
+    let best = null;
+    let bestDist = Infinity;
+    state.poles.forEach(p => {
+      const d = turf.distance(pointFeature, p, { units: 'kilometers' });
+      if (d < bestDist) { bestDist = d; best = p; }
+    });
+    return { pole: best, distKm: bestDist };
+  }
+
+  const usedPoleKeys = new Set();
+  const snappedOdcPoints = [];
+
   state.odcPoints.forEach(odc => {
-    const origin = odc.geometry.coordinates;
-    const odcFeat = { type:'Feature', geometry: { type:'Point', coordinates: origin } };
-    const { nearestPoint, lineFeature } = nearestOnFeeder(odcFeat);
+    const originalCoord = odc.geometry.coordinates;
+    const odcFeatOriginal = { type:'Feature', geometry: { type:'Point', coordinates: originalCoord } };
+
+    // Snap ODC ke tiang terdekat
+    let snappedOdc = nearestPole(odcFeatOriginal).pole;
+    if (!snappedOdc) {
+      // Jika tidak ada tiang, tetap gunakan koordinat asli
+      snappedOdc = odcFeatOriginal;
+    }
+    const origin = snappedOdc.geometry.coordinates;
+    snappedOdcPoints.push({ type:'Feature', properties: odc.properties || {}, geometry: { type:'Point', coordinates: origin } });
+
+    const { nearestPoint, lineFeature } = nearestOnFeeder(odcFeatOriginal);
+    const lineLenKm = lineFeature ? turf.length(lineFeature, { units: 'kilometers' }) : 0;
+    const spacingKm = (state.material.odpSpacingMeters || 120) / 1000;
+    const startKm = nearestPoint ? nearestPoint.properties.location : 0;
+
     if (!nearestPoint || !lineFeature) {
-      const radiusMeters = state.material.odpSpacingMeters || 120;
-      for (let i = 0; i < odpPer; i++) {
-        const angle = (2 * Math.PI * i) / odpPer;
-        const dx = (radiusMeters / 111320) * Math.cos(angle);
-        const dy = (radiusMeters / 110540) * Math.sin(angle);
-        const lng = origin[0] + dx;
-        const lat = origin[1] + dy;
-        const odpPoint = { type: 'Feature', properties: { type: 'odp' }, geometry: { type: 'Point', coordinates: [lng, lat] } };
+      // Tidak ada feeder dalam batas, pilih ODP dari tiang terdekat ke ODC (snapped)
+      const odcFeatSnapped = { type:'Feature', geometry:{ type:'Point', coordinates: origin } };
+      // Ambil N tiang terdekat selain tiang ODC
+      const polesSorted = state.poles.slice().sort((a,b) => {
+        const da = turf.distance(odcFeatSnapped, a, { units:'kilometers' });
+        const db = turf.distance(odcFeatSnapped, b, { units:'kilometers' });
+        return da - db;
+      });
+      let added = 0;
+      for (const p of polesSorted) {
+        const key = p.geometry.coordinates.join(',');
+        if (key === origin.join(',')) continue; // jangan pakai tiang yang sama dengan ODC
+        if (usedPoleKeys.has(key)) continue;
+        const coord = p.geometry.coordinates;
+        const odpPoint = { type:'Feature', properties:{ type:'odp' }, geometry:{ type:'Point', coordinates: coord } };
         odps.push(odpPoint);
-        const line = { type: 'Feature', properties: { type: 'distribution' }, geometry: { type: 'LineString', coordinates: [origin, [lng, lat]] } };
-        distLines.push(line);
-        distTotal += radiusMeters;
+        const distLine = { type:'Feature', properties:{ type:'distribution' }, geometry:{ type:'LineString', coordinates: [origin, coord] } };
+        distLines.push(distLine);
+        distTotal += turf.distance({type:'Feature', geometry:{type:'Point', coordinates: origin}}, {type:'Feature', geometry:{type:'Point', coordinates: coord}}, { units:'kilometers' }) * 1000;
+        usedPoleKeys.add(key);
+        added++;
+        if (added >= odpPer) break;
       }
       return;
     }
-    const lineLenKm = turf.length(lineFeature, { units: 'kilometers' });
-    const spacingKm = (state.material.odpSpacingMeters || 120) / 1000;
-    const startKm = nearestPoint.properties.location;
 
     for (let i = 1; i <= odpPer; i++) {
       const step = Math.ceil(i / 2);
@@ -379,15 +413,23 @@ function computeODPAndDistribution() {
       if (targetKm < 0) targetKm = 0;
       if (targetKm > lineLenKm) targetKm = lineLenKm;
       const alongPt = turf.along(lineFeature, targetKm, { units: 'kilometers' });
-      const coord = alongPt.geometry.coordinates;
-      const odpPoint = { type: 'Feature', properties: { type: 'odp' }, geometry: { type: 'Point', coordinates: coord } };
+      // Snap ODP ke tiang terdekat dari titik along
+      const nearestPoleToAlong = nearestPole(alongPt).pole;
+      const coord = (nearestPoleToAlong ? nearestPoleToAlong.geometry.coordinates : alongPt.geometry.coordinates);
+      const key = coord.join(',');
+      if (key === origin.join(',')) continue; // hindari tiang ODC
+      if (usedPoleKeys.has(key)) continue; // hindari duplikasi ODP pada tiang sama
+      const odpPoint = { type:'Feature', properties: { type: 'odp' }, geometry: { type: 'Point', coordinates: coord } };
       odps.push(odpPoint);
       const distLine = { type: 'Feature', properties: { type: 'distribution' }, geometry: { type: 'LineString', coordinates: [origin, coord] } };
       distLines.push(distLine);
-      distTotal += turf.distance(odcFeat, alongPt, { units: 'kilometers' }) * 1000;
+      distTotal += turf.distance({type:'Feature', geometry:{type:'Point', coordinates: origin}}, {type:'Feature', geometry:{type:'Point', coordinates: coord}}, { units:'kilometers' }) * 1000;
+      usedPoleKeys.add(key);
     }
   });
 
+  // Ganti ODC dengan versi snapped pada state
+  state.odcPoints = snappedOdcPoints;
   state.odps = odps;
   state.distLines = distLines;
   state.material.odcCount = state.odcPoints.length;
