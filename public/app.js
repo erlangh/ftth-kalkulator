@@ -49,17 +49,59 @@ const poleSpacingEl = document.getElementById('poleSpacing');
 const feederCoreEl = document.getElementById('feederCore');
 const odpPerOdcEl = document.getElementById('odpPerOdc');
 const summaryContent = document.getElementById('summaryContent');
+const exportXlsxBtn = document.getElementById('exportXlsxBtn');
 
 poleTypeEl.addEventListener('change', () => state.material.poleType = poleTypeEl.value);
 poleSpacingEl.addEventListener('change', () => state.material.poleSpacing = Number(poleSpacingEl.value));
 feederCoreEl.addEventListener('change', () => state.material.feederCore = Number(feederCoreEl.value));
 odpPerOdcEl.addEventListener('change', () => state.material.odpPerOdc = Number(odpPerOdcEl.value));
 
+const feederNameSelect = document.getElementById('feederNameSelect');
+const feederMaxProjEl = document.getElementById('feederMaxProj');
+
+state.feederNameFilter = state.feederNameFilter || '';
+state.feederMaxProjMeters = state.feederMaxProjMeters || 200;
+if (feederMaxProjEl) feederMaxProjEl.value = String(state.feederMaxProjMeters);
+
+function populateFeederNameOptions(geojson) {
+  if (!feederNameSelect) return;
+  const feats = geojson.features || [];
+  const names = new Set();
+  feats.forEach(f => {
+    const g = f.geometry;
+    if (!g) return;
+    if (g.type === 'LineString' || g.type === 'MultiLineString') {
+      const nm = (f.properties && f.properties.name ? String(f.properties.name) : '').trim();
+      if (nm) names.add(nm);
+    }
+  });
+  feederNameSelect.innerHTML = '<option value="">Semua garis</option>' + Array.from(names).map(n => `<option value="${n}">${n}</option>`).join('');
+  feederNameSelect.disabled = false;
+}
+
+if (feederNameSelect) {
+  feederNameSelect.addEventListener('change', () => {
+    state.feederNameFilter = feederNameSelect.value || '';
+    if (state.uploaded) {
+      const { odcPoints, feederLines } = splitFeatures(state.uploaded.geojson);
+      state.odcPoints = odcPoints;
+      state.feederLines = feederLines;
+      renderUploaded();
+    }
+  });
+}
+if (feederMaxProjEl) {
+  feederMaxProjEl.addEventListener('change', () => {
+    state.feederMaxProjMeters = Number(feederMaxProjEl.value) || 200;
+  });
+}
+
 fileInput.addEventListener('change', async (e) => {
   const file = e.target.files[0];
   if (!file) return;
   const geojson = await readKmlKmzToGeoJSON(file);
   state.uploaded = { geojson, filename: file.name };
+  populateFeederNameOptions(geojson);
   const { odcPoints, feederLines } = splitFeatures(geojson);
   state.odcPoints = odcPoints;
   state.feederLines = feederLines;
@@ -67,6 +109,7 @@ fileInput.addEventListener('change', async (e) => {
   exportKmlBtn.disabled = true;
   exportKmzBtn.disabled = true;
   exportPdfBtn.disabled = true;
+  if (exportXlsxBtn) exportXlsxBtn.disabled = true;
 });
 
 processBtn.addEventListener('click', () => {
@@ -78,6 +121,7 @@ processBtn.addEventListener('click', () => {
   exportKmlBtn.disabled = false;
   exportKmzBtn.disabled = false;
   exportPdfBtn.disabled = false;
+  if (exportXlsxBtn) exportXlsxBtn.disabled = false;
 });
 
 exportKmlBtn.addEventListener('click', () => {
@@ -194,19 +238,58 @@ async function readKmlKmzToGeoJSON(file) {
   throw new Error('Format file tidak didukung.');
 }
 
+const odpSpacingFeederEl = document.getElementById('odpSpacingFeeder');
+const feederKeywordEl = document.getElementById('feederKeyword');
+
+// initialize defaults
+state.material.odpSpacingMeters = state.material.odpSpacingMeters || 120;
+state.feederKeyword = state.feederKeyword || 'feeder';
+if (odpSpacingFeederEl) odpSpacingFeederEl.value = String(state.material.odpSpacingMeters);
+if (feederKeywordEl) feederKeywordEl.value = state.feederKeyword;
+
+if (odpSpacingFeederEl) {
+  odpSpacingFeederEl.addEventListener('change', () => {
+    state.material.odpSpacingMeters = Number(odpSpacingFeederEl.value) || 120;
+  });
+}
+if (feederKeywordEl) {
+  feederKeywordEl.addEventListener('input', () => {
+    const kw = feederKeywordEl.value.trim().toLowerCase();
+    state.feederKeyword = kw || 'feeder';
+    if (state.uploaded) {
+      const { odcPoints, feederLines } = splitFeatures(state.uploaded.geojson);
+      state.odcPoints = odcPoints;
+      state.feederLines = feederLines;
+      renderUploaded();
+    }
+  });
+}
+
 function splitFeatures(geojson) {
   const odcPoints = [];
-  const feederLines = [];
+  let feederLines = [];
+  const otherLines = [];
   const feats = geojson.features || [];
+  const kw = (state.feederKeyword || 'feeder').toLowerCase();
+  const nameFilter = (state.feederNameFilter || '').toLowerCase();
   feats.forEach(f => {
     const g = f.geometry;
     if (!g) return;
+    const name = (f.properties && f.properties.name ? String(f.properties.name) : '').toLowerCase();
+    const styleUrl = (f.properties && f.properties.styleUrl ? String(f.properties.styleUrl) : '').toLowerCase();
+    let isFeederHint = false;
+    if (nameFilter) {
+      isFeederHint = name.includes(nameFilter);
+    } else {
+      isFeederHint = name.includes(kw) || styleUrl.includes(kw);
+    }
     if (g.type === 'Point') {
       odcPoints.push(f);
     } else if (g.type === 'LineString' || g.type === 'MultiLineString') {
-      feederLines.push(f);
+      if (isFeederHint) feederLines.push(f); else otherLines.push(f);
     }
   });
+  if (feederLines.length === 0) feederLines = otherLines;
   return { odcPoints, feederLines };
 }
 
@@ -241,21 +324,67 @@ function computeODPAndDistribution() {
   const distLines = [];
   let distTotal = 0;
 
+  function nearestOnFeeder(odc) {
+    let best = null;
+    let bestDist = Infinity;
+    let bestLine = null;
+    state.feederLines.forEach(line => {
+      let lineStr = line.geometry;
+      if (lineStr.type !== 'LineString') {
+        const flat = turf.flatten(line).features;
+        flat.forEach(ff => {
+          const np = turf.nearestPointOnLine(ff, odc);
+          const d = turf.distance(odc, np, { units: 'kilometers' }) * 1000;
+          if (d < bestDist) { bestDist = d; best = np; bestLine = ff; }
+        });
+        return;
+      }
+      const featureLine = { type:'Feature', geometry: lineStr };
+      const np = turf.nearestPointOnLine(featureLine, odc);
+      const d = turf.distance(odc, np, { units: 'kilometers' }) * 1000;
+      if (d < bestDist) { bestDist = d; best = np; bestLine = featureLine; }
+    });
+    if (best && bestDist > (state.feederMaxProjMeters || 200)) return { nearestPoint: null, lineFeature: null };
+    return { nearestPoint: best, lineFeature: bestLine };
+  }
+
   state.odcPoints.forEach(odc => {
-    const origin = odc.geometry.coordinates; // [lng, lat]
-    // Create radial ODPs at ~100m in 4/8/12/16 directions
-    const radiusMeters = 120; // default distribution length per ODP
-    for (let i = 0; i < odpPer; i++) {
-      const angle = (2 * Math.PI * i) / odpPer;
-      const dx = (radiusMeters / 111320) * Math.cos(angle); // deg lon approx at equator
-      const dy = (radiusMeters / 110540) * Math.sin(angle); // deg lat approx
-      const lng = origin[0] + dx;
-      const lat = origin[1] + dy;
-      const odpPoint = { type: 'Feature', properties: { type: 'odp' }, geometry: { type: 'Point', coordinates: [lng, lat] } };
+    const origin = odc.geometry.coordinates;
+    const odcFeat = { type:'Feature', geometry: { type:'Point', coordinates: origin } };
+    const { nearestPoint, lineFeature } = nearestOnFeeder(odcFeat);
+    if (!nearestPoint || !lineFeature) {
+      const radiusMeters = state.material.odpSpacingMeters || 120;
+      for (let i = 0; i < odpPer; i++) {
+        const angle = (2 * Math.PI * i) / odpPer;
+        const dx = (radiusMeters / 111320) * Math.cos(angle);
+        const dy = (radiusMeters / 110540) * Math.sin(angle);
+        const lng = origin[0] + dx;
+        const lat = origin[1] + dy;
+        const odpPoint = { type: 'Feature', properties: { type: 'odp' }, geometry: { type: 'Point', coordinates: [lng, lat] } };
+        odps.push(odpPoint);
+        const line = { type: 'Feature', properties: { type: 'distribution' }, geometry: { type: 'LineString', coordinates: [origin, [lng, lat]] } };
+        distLines.push(line);
+        distTotal += radiusMeters;
+      }
+      return;
+    }
+    const lineLenKm = turf.length(lineFeature, { units: 'kilometers' });
+    const spacingKm = (state.material.odpSpacingMeters || 120) / 1000;
+    const startKm = nearestPoint.properties.location;
+
+    for (let i = 1; i <= odpPer; i++) {
+      const step = Math.ceil(i / 2);
+      const dir = (i % 2 === 1) ? 1 : -1;
+      let targetKm = startKm + dir * step * spacingKm;
+      if (targetKm < 0) targetKm = 0;
+      if (targetKm > lineLenKm) targetKm = lineLenKm;
+      const alongPt = turf.along(lineFeature, targetKm, { units: 'kilometers' });
+      const coord = alongPt.geometry.coordinates;
+      const odpPoint = { type: 'Feature', properties: { type: 'odp' }, geometry: { type: 'Point', coordinates: coord } };
       odps.push(odpPoint);
-      const line = { type: 'Feature', properties: { type: 'distribution' }, geometry: { type: 'LineString', coordinates: [origin, [lng, lat]] } };
-      distLines.push(line);
-      distTotal += radiusMeters;
+      const distLine = { type: 'Feature', properties: { type: 'distribution' }, geometry: { type: 'LineString', coordinates: [origin, coord] } };
+      distLines.push(distLine);
+      distTotal += turf.distance(odcFeat, alongPt, { units: 'kilometers' }) * 1000;
     }
   });
 
@@ -271,8 +400,14 @@ function computeMaterialSummary() {
 }
 
 function buildKml() {
-  // Build a simple KML with folders: ODC, Feeder, Poles, ODP, Distribution
   const kmlHeader = `<?xml version="1.0" encoding="UTF-8"?>\n<kml xmlns="http://www.opengis.net/kml/2.2"><Document>`;
+  const styles = `
+    <Style id="style_odc"><IconStyle><color>ff4ea3ff</color><scale>1.2</scale><Icon><href>http://maps.google.com/mapfiles/kml/paddle/blu-circle.png</href></Icon></IconStyle></Style>
+    <Style id="style_feeder"><LineStyle><color>ff006bff</color><width>3</width></LineStyle></Style>
+    <Style id="style_pole"><IconStyle><color>ffaaaaaa</color><scale>1.0</scale><Icon><href>http://maps.google.com/mapfiles/kml/paddle/wht-circle.png</href></Icon></IconStyle></Style>
+    <Style id="style_odp"><IconStyle><color>ff8fda7f</color><scale>1.2</scale><Icon><href>http://maps.google.com/mapfiles/kml/paddle/grn-circle.png</href></Icon></IconStyle></Style>
+    <Style id="style_dist"><LineStyle><color>ff94b800</color><width>2</width></LineStyle></Style>
+  `;
   const kmlFooter = `</Document></kml>`;
 
   function coordsToKml(coords) {
@@ -281,37 +416,128 @@ function buildKml() {
     }
     return coords.join(',');
   }
-  function pointPlacemark(name, coord) {
-    return `<Placemark><name>${name}</name><Point><coordinates>${coord.join(',')}</coordinates></Point></Placemark>`;
+  function pointPlacemark(name, coord, style) {
+    return `<Placemark><name>${name}</name><styleUrl>#${style}</styleUrl><Point><coordinates>${coord.join(',')}</coordinates></Point></Placemark>`;
   }
-  function linePlacemark(name, coords) {
-    return `<Placemark><name>${name}</name><LineString><tessellate>1</tessellate><coordinates>${coordsToKml(coords)}</coordinates></LineString></Placemark>`;
+  function linePlacemark(name, coords, style) {
+    return `<Placemark><name>${name}</name><styleUrl>#${style}</styleUrl><LineString><tessellate>1</tessellate><coordinates>${coordsToKml(coords)}</coordinates></LineString></Placemark>`;
   }
 
-  let body = '';
+  let body = styles;
   body += `<Folder><name>ODC</name>`;
-  state.odcPoints.forEach((f, idx) => { body += pointPlacemark(`ODC ${idx+1}`, f.geometry.coordinates); });
+  state.odcPoints.forEach((f, idx) => { body += pointPlacemark(`ODC ${idx+1}`, f.geometry.coordinates, 'style_odc'); });
   body += `</Folder>`;
 
   body += `<Folder><name>Feeder</name>`;
   state.feederLines.forEach((f, idx) => {
     const g = f.geometry;
-    if (g.type === 'LineString') body += linePlacemark(`Feeder ${idx+1}`, g.coordinates);
-    else if (g.type === 'MultiLineString') g.coordinates.forEach((c, j) => body += linePlacemark(`Feeder ${idx+1}.${j+1}`, c));
+    if (g.type === 'LineString') body += linePlacemark(`Feeder ${idx+1}`, g.coordinates, 'style_feeder');
+    else if (g.type === 'MultiLineString') g.coordinates.forEach((c, j) => body += linePlacemark(`Feeder ${idx+1}.${j+1}`, c, 'style_feeder'));
   });
   body += `</Folder>`;
 
   body += `<Folder><name>Poles</name>`;
-  state.poles.forEach((f, idx) => { body += pointPlacemark(`Pole ${idx+1} (${state.material.poleType}m)`, f.geometry.coordinates); });
+  state.poles.forEach((f, idx) => { body += pointPlacemark(`Pole ${idx+1} (${state.material.poleType}m)`, f.geometry.coordinates, 'style_pole'); });
   body += `</Folder>`;
 
   body += `<Folder><name>ODP</name>`;
-  state.odps.forEach((f, idx) => { body += pointPlacemark(`ODP ${idx+1}`, f.geometry.coordinates); });
+  state.odps.forEach((f, idx) => { body += pointPlacemark(`ODP ${idx+1}`, f.geometry.coordinates, 'style_odp'); });
   body += `</Folder>`;
 
   body += `<Folder><name>Distribution</name>`;
-  state.distLines.forEach((f, idx) => { body += linePlacemark(`Distribusi ${idx+1}`, f.geometry.coordinates); });
+  state.distLines.forEach((f, idx) => { body += linePlacemark(`Distribusi ${idx+1}`, f.geometry.coordinates, 'style_dist'); });
   body += `</Folder>`;
 
   return kmlHeader + body + kmlFooter;
+}
+
+function safeName(base, suffix, ext) {
+  const stem = (state.uploaded?.filename || base).replace(/\.(kml|kmz|pdf|xlsx)$/i, '');
+  return `${stem}_${suffix}.${ext}`;
+}
+
+function buildWorkbook() {
+  const wb = XLSX.utils.book_new();
+  const m = state.material;
+  const summaryAoa = [
+    ['Jumlah ODC', m.odcCount],
+    ['ODP per ODC', m.odpPerOdc],
+    ['Jumlah ODP', m.odpCount],
+    ['Jenis Tiang (m)', m.poleType],
+    ['Jarak Antar Tiang (m)', m.poleSpacing],
+    ['Jumlah Tiang', m.poles],
+    ['Feeder (core)', m.feederCore],
+    ['Panjang Kabel Feeder (m)', Number(m.feederLength.toFixed(1))],
+    ['Panjang Kabel Distribusi (m)', Number(m.distributionLength.toFixed(1))],
+    ['Kata Kunci Feeder', state.feederKeyword || ''],
+    ['Nama Feeder (filter)', state.feederNameFilter || ''],
+    ['Batas Jarak ODC→Feeder (m)', state.feederMaxProjMeters || 200],
+    ['Jarak ODP Sepanjang Feeder (m)', state.material.odpSpacingMeters || 120],
+  ];
+  const wsSummary = XLSX.utils.aoa_to_sheet([['Parameter','Nilai'], ...summaryAoa]);
+  XLSX.utils.book_append_sheet(wb, wsSummary, 'Ringkasan');
+
+  const odcAoa = [['#','Longitude','Latitude','Nama']];
+  state.odcPoints.forEach((f, i) => {
+    const c = f.geometry.coordinates;
+    const nm = (f.properties && f.properties.name) ? String(f.properties.name) : '';
+    odcAoa.push([i+1, c[0], c[1], nm]);
+  });
+  const wsOdc = XLSX.utils.aoa_to_sheet(odcAoa);
+  XLSX.utils.book_append_sheet(wb, wsOdc, 'ODC');
+
+  const odpAoa = [['#','ODC #','Longitude','Latitude']];
+  const distAoa = [['#','ODC #','ODP #','ODC Lon','ODC Lat','ODP Lon','ODP Lat','Panjang (m)']];
+  let idx = 0;
+  state.odcPoints.forEach((odc, odcIdx) => {
+    const origin = odc.geometry.coordinates;
+    for (let k = 0; k < state.material.odpPerOdc; k++) {
+      const odp = state.odps[idx];
+      const distLine = state.distLines[idx];
+      if (!odp || !distLine) break;
+      const oc = odp.geometry.coordinates;
+      odpAoa.push([idx+1, odcIdx+1, oc[0], oc[1]]);
+      const lenM = turf.distance({type:'Feature', geometry:{type:'Point', coordinates: origin}}, {type:'Feature', geometry:{type:'Point', coordinates: oc}}, {units:'kilometers'}) * 1000;
+      distAoa.push([idx+1, odcIdx+1, (k+1), origin[0], origin[1], oc[0], oc[1], Number(lenM.toFixed(1))]);
+      idx++;
+    }
+  });
+  const wsOdp = XLSX.utils.aoa_to_sheet(odpAoa);
+  const wsDist = XLSX.utils.aoa_to_sheet(distAoa);
+  XLSX.utils.book_append_sheet(wb, wsOdp, 'ODP');
+  XLSX.utils.book_append_sheet(wb, wsDist, 'Distribusi');
+
+  const feederAoa = [['#','Nama','Tipe','Panjang (m)']];
+  let fidx = 0;
+  state.feederLines.forEach(f => {
+    const g = f.geometry;
+    if (g.type === 'LineString') {
+      const lenM = turf.length({type:'Feature', geometry:g}, {units:'kilometers'}) * 1000;
+      const nm = (f.properties && f.properties.name) ? String(f.properties.name) : '';
+      feederAoa.push([++fidx, nm, 'LineString', Number(lenM.toFixed(1))]);
+    } else if (g.type === 'MultiLineString') {
+      g.coordinates.forEach((coords) => {
+        const lenM = turf.length({type:'Feature', geometry:{type:'LineString', coordinates: coords}}, {units:'kilometers'}) * 1000;
+        const nm = (f.properties && f.properties.name) ? String(f.properties.name) : '';
+        feederAoa.push([++fidx, nm, 'MultiLineString seg', Number(lenM.toFixed(1))]);
+      });
+    }
+  });
+  const wsFeeder = XLSX.utils.aoa_to_sheet(feederAoa);
+  XLSX.utils.book_append_sheet(wb, wsFeeder, 'Feeder');
+
+  return wb;
+}
+
+if (exportXlsxBtn) {
+  exportXlsxBtn.addEventListener('click', () => {
+    try {
+      const wb = buildWorkbook();
+      const fname = safeName('output.xlsx', 'enhanced', 'xlsx');
+      XLSX.writeFile(wb, fname);
+    } catch (err) {
+      console.error('Gagal membuat XLSX', err);
+      alert('Gagal membuat file XLSX: ' + err.message);
+    }
+  });
 }

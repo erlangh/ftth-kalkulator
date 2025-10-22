@@ -55,10 +55,33 @@
     </div>
 
     <div class="control-group">
+      <label for="odpSpacingFeeder">Jarak ODP sepanjang feeder (m):</label>
+      <input type="number" id="odpSpacingFeeder" min="30" max="500" step="10" value="120" />
+    </div>
+
+    <div class="control-group">
+      <label for="feederKeyword">Kata kunci feeder (opsional):</label>
+      <input type="text" id="feederKeyword" placeholder="feeder" />
+    </div>
+
+    <div class="control-group">
+      <label for="feederNameSelect">Pilih nama feeder (opsional):</label>
+      <select id="feederNameSelect" disabled>
+        <option value="">Semua garis</option>
+      </select>
+    </div>
+
+    <div class="control-group">
+      <label for="feederMaxProj">Batas jarak ODC→feeder (m):</label>
+      <input type="number" id="feederMaxProj" min="20" max="1000" step="10" value="200" />
+    </div>
+
+    <div class="control-group">
       <button id="processBtn">Proses</button>
       <button id="exportKmlBtn" disabled>Export KML</button>
       <button id="exportKmzBtn" disabled>Export KMZ</button>
       <button id="exportPdfBtn" disabled>Export PDF</button>
+      <button id="exportXlsxBtn" disabled>Export XLSX</button>
     </div>
   </section>
 
@@ -75,6 +98,7 @@
   <script src="/vendor/jspdf/dist/jspdf.umd.min.js"></script>
   <script src="/vendor/@turf/turf/turf.min.js"></script>
   <script src="/vendor/togeojson/togeojson.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <script src="/app.js"></script>
 </body>
 </html>
