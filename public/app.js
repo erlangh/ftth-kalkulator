@@ -517,10 +517,10 @@ function computeMaterialSummary() {
 function buildKml() {
   const kmlHeader = `<?xml version="1.0" encoding="UTF-8"?>\n<kml xmlns="http://www.opengis.net/kml/2.2"><Document>`;
   const styles = `
-    <Style id="style_odc"><IconStyle><color>ff4ea3ff</color><scale>1.2</scale><Icon><href>http://maps.google.com/mapfiles/kml/paddle/blu-circle.png</href></Icon></IconStyle></Style>
+    <Style id="style_odc"><IconStyle><color>ff4ea3ff</color><scale>1.2</scale><Icon><href>http://maps.google.com/mapfiles/kml/paddle/blu-circle.png</href></Icon></IconStyle><LabelStyle><scale>1.2</scale></LabelStyle></Style>
     <Style id="style_feeder"><LineStyle><color>ff006bff</color><width>3</width></LineStyle></Style>
     <Style id="style_pole"><IconStyle><color>ffaaaaaa</color><scale>1.0</scale><Icon><href>http://maps.google.com/mapfiles/kml/paddle/wht-circle.png</href></Icon></IconStyle></Style>
-    <Style id="style_odp"><IconStyle><color>ff8fda7f</color><scale>1.2</scale><Icon><href>http://maps.google.com/mapfiles/kml/paddle/grn-circle.png</href></Icon></IconStyle></Style>
+    <Style id="style_odp"><IconStyle><color>ff8fda7f</color><scale>1.2</scale><Icon><href>http://maps.google.com/mapfiles/kml/paddle/grn-circle.png</href></Icon></IconStyle><LabelStyle><scale>1.2</scale></LabelStyle></Style>
     <Style id="style_dist"><LineStyle><color>ff94b800</color><width>2</width></LineStyle></Style>
   `;
   const kmlFooter = `</Document></kml>`;
@@ -532,7 +532,9 @@ function buildKml() {
     return coords.join(',');
   }
   function pointPlacemark(name, coord, style) {
-    return `<Placemark><name>${name}</name><styleUrl>#${style}</styleUrl><Point><coordinates>${coord.join(',')}</coordinates></Point></Placemark>`;
+    const desc = name;
+    const ext = `<ExtendedData><Data name="fullLabel"><value>${name}</value></Data></ExtendedData>`;
+    return `<Placemark><name>${name}</name><styleUrl>#${style}</styleUrl><description><![CDATA[${desc}]]></description>${ext}<Point><coordinates>${coord.join(',')}</coordinates></Point></Placemark>`;
   }
   function linePlacemark(name, coords, style) {
     return `<Placemark><name>${name}</name><styleUrl>#${style}</styleUrl><LineString><tessellate>1</tessellate><coordinates>${coordsToKml(coords)}</coordinates></LineString></Placemark>`;
