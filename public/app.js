@@ -540,7 +540,11 @@ function buildKml() {
 
   let body = styles;
   body += `<Folder><name>ODC</name>`;
-  state.odcPoints.forEach((f, idx) => { body += pointPlacemark(`ODC ${idx+1}`, f.geometry.coordinates, 'style_odc'); });
+  state.odcPoints.forEach((f, idx) => {
+    const idxStr = String(idx + 1).padStart(Number(state.labelPadWidth) || 1, '0');
+    const name = `${state.odcLabelPrefix || 'ODC-'}${idxStr}`;
+    body += pointPlacemark(name, f.geometry.coordinates, 'style_odc');
+  });
   body += `</Folder>`;
 
   body += `<Folder><name>Feeder</name>`;
@@ -556,7 +560,11 @@ function buildKml() {
   body += `</Folder>`;
 
   body += `<Folder><name>ODP</name>`;
-  state.odps.forEach((f, idx) => { body += pointPlacemark(`ODP ${idx+1}`, f.geometry.coordinates, 'style_odp'); });
+  state.odps.forEach((f, idx) => {
+    const idxStr = String(idx + 1).padStart(Number(state.labelPadWidth) || 1, '0');
+    const name = `${state.odpLabelPrefix || 'ODP-'}${idxStr}`;
+    body += pointPlacemark(name, f.geometry.coordinates, 'style_odp');
+  });
   body += `</Folder>`;
 
   body += `<Folder><name>Distribution</name>`;
