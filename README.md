@@ -103,3 +103,8 @@ git push -u origin main
 ```
 
 Jika perlu autentikasi, gunakan Personal Access Token (PAT) atau `gh auth login`.
+
+## Releases & Changelog
+- Lihat rilis: https://github.com/erlangh/ftth-kalkulator/releases
+- Rilis awal: `v1.0.0` — https://github.com/erlangh/ftth-kalkulator/releases/tag/v1.0.0
+- Changelog: lihat `CHANGELOG.md` di repo.
