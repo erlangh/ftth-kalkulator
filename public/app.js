@@ -50,6 +50,7 @@ const feederCoreEl = document.getElementById('feederCore');
 const odpPerOdcEl = document.getElementById('odpPerOdc');
 const summaryContent = document.getElementById('summaryContent');
 const exportXlsxBtn = document.getElementById('exportXlsxBtn');
+const odcSnapModeEl = document.getElementById('odcSnapMode');
 
 poleTypeEl.addEventListener('change', () => state.material.poleType = poleTypeEl.value);
 poleSpacingEl.addEventListener('change', () => state.material.poleSpacing = Number(poleSpacingEl.value));
@@ -62,6 +63,11 @@ const feederMaxProjEl = document.getElementById('feederMaxProj');
 state.feederNameFilter = state.feederNameFilter || '';
 state.feederMaxProjMeters = state.feederMaxProjMeters || 200;
 if (feederMaxProjEl) feederMaxProjEl.value = String(state.feederMaxProjMeters);
+state.odcSnapMode = state.odcSnapMode || 'nearest';
+if (odcSnapModeEl) odcSnapModeEl.value = state.odcSnapMode;
+if (odcSnapModeEl) odcSnapModeEl.addEventListener('change', () => {
+  state.odcSnapMode = odcSnapModeEl.value || 'nearest';
+});
 
 function populateFeederNameOptions(geojson) {
   if (!feederNameSelect) return;
@@ -328,24 +334,25 @@ function computeODPAndDistribution() {
     let best = null;
     let bestDist = Infinity;
     let bestLine = null;
-    state.feederLines.forEach(line => {
+    let bestIdx = null;
+    state.feederLines.forEach((line, idx) => {
       let lineStr = line.geometry;
       if (lineStr.type !== 'LineString') {
         const flat = turf.flatten(line).features;
         flat.forEach(ff => {
           const np = turf.nearestPointOnLine(ff, odc);
           const d = turf.distance(odc, np, { units: 'kilometers' }) * 1000;
-          if (d < bestDist) { bestDist = d; best = np; bestLine = ff; }
+          if (d < bestDist) { bestDist = d; best = np; bestLine = ff; bestIdx = idx; }
         });
         return;
       }
       const featureLine = { type:'Feature', geometry: lineStr };
       const np = turf.nearestPointOnLine(featureLine, odc);
       const d = turf.distance(odc, np, { units: 'kilometers' }) * 1000;
-      if (d < bestDist) { bestDist = d; best = np; bestLine = featureLine; }
+      if (d < bestDist) { bestDist = d; best = np; bestLine = featureLine; bestIdx = idx; }
     });
-    if (best && bestDist > (state.feederMaxProjMeters || 200)) return { nearestPoint: null, lineFeature: null };
-    return { nearestPoint: best, lineFeature: bestLine };
+    if (best && bestDist > (state.feederMaxProjMeters || 200)) return { nearestPoint: null, lineFeature: null, lineIndex: null };
+    return { nearestPoint: best, lineFeature: bestLine, lineIndex: bestIdx };
   }
 
   function nearestPole(pointFeature) {
@@ -365,12 +372,24 @@ function computeODPAndDistribution() {
     const originalCoord = odc.geometry.coordinates;
     const odcFeatOriginal = { type:'Feature', geometry: { type:'Point', coordinates: originalCoord } };
 
-    // Snap ODC ke tiang terdekat
-    let snappedOdc = nearestPole(odcFeatOriginal).pole;
-    if (!snappedOdc) {
-      // Jika tidak ada tiang, tetap gunakan koordinat asli
-      snappedOdc = odcFeatOriginal;
+    // Tentukan snap ODC sesuai mode
+    let snappedOdc = null;
+    if (state.odcSnapMode === 'first_line' || state.odcSnapMode === 'last_line') {
+      const info = nearestOnFeeder(odcFeatOriginal);
+      const lineIdx = info.lineIndex;
+      if (lineIdx !== null && lineIdx !== undefined) {
+        const polesOnLine = state.poles.filter(p => p.properties && p.properties.lineIndex === lineIdx);
+        if (polesOnLine.length > 0) {
+          polesOnLine.sort((a,b) => (a.properties.locationKm - b.properties.locationKm));
+          snappedOdc = (state.odcSnapMode === 'first_line') ? polesOnLine[0] : polesOnLine[polesOnLine.length - 1];
+        }
+      }
     }
+    if (!snappedOdc) {
+      // Default: snap ke tiang terdekat
+      snappedOdc = nearestPole(odcFeatOriginal).pole || odcFeatOriginal;
+    }
+
     const origin = snappedOdc.geometry.coordinates;
     snappedOdcPoints.push({ type:'Feature', properties: odc.properties || {}, geometry: { type:'Point', coordinates: origin } });
 
