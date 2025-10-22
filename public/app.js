@@ -534,10 +534,10 @@ function buildKml() {
   function pointPlacemark(name, coord, style) {
     const desc = name;
     const ext = `<ExtendedData><Data name="fullLabel"><value>${name}</value></Data></ExtendedData>`;
-    return `<Placemark><name>${name}</name><styleUrl>#${style}</styleUrl><description><![CDATA[${desc}]]></description>${ext}<Point><coordinates>${coord.join(',')}</coordinates></Point></Placemark>`;
+    return `<Placemark><name><![CDATA[${name}]]></name><styleUrl>#${style}</styleUrl><description><![CDATA[${desc}]]></description>${ext}<Point><coordinates>${coord.join(',')}</coordinates></Point></Placemark>`;
   }
   function linePlacemark(name, coords, style) {
-    return `<Placemark><name>${name}</name><styleUrl>#${style}</styleUrl><LineString><tessellate>1</tessellate><coordinates>${coordsToKml(coords)}</coordinates></LineString></Placemark>`;
+    return `<Placemark><name><![CDATA[${name}]]></name><styleUrl>#${style}</styleUrl><LineString><tessellate>1</tessellate><coordinates>${coordsToKml(coords)}</coordinates></LineString></Placemark>`;
   }
 
   let body = styles;
