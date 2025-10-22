@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FTTH Kalkulator</title>
+  <link rel="stylesheet" href="/vendor/leaflet/dist/leaflet.css" />
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <header>
+    <h1>FTTH Kalkulator</h1>
+    <p>Upload KML/KMZ berisi titik ODC dan rute feeder. Sistem akan menghitung tiang, ODP, rute kabel, dan material. Ekspor KML/KMZ + PDF.</p>
+  </header>
+
+  <section class="controls">
+    <div class="control-group">
+      <label for="fileInput">Upload KML/KMZ:</label>
+      <input type="file" id="fileInput" accept=".kml,.kmz" />
+    </div>
+
+    <div class="control-group">
+      <label for="poleType">Jenis tiang:</label>
+      <select id="poleType">
+        <option value="6">6m</option>
+        <option value="7">7m</option>
+        <option value="9">9m</option>
+      </select>
+    </div>
+
+    <div class="control-group">
+      <label for="poleSpacing">Jarak antar tiang (m):</label>
+      <input type="number" id="poleSpacing" min="50" max="100" step="5" value="50" />
+    </div>
+
+    <div class="control-group">
+      <label for="feederCore">Feeder (core):</label>
+      <select id="feederCore">
+        <option value="12">12c</option>
+        <option value="24">24c</option>
+        <option value="48">48c</option>
+        <option value="96">96c</option>
+        <option value="144">144c</option>
+      </select>
+    </div>
+
+    <div class="control-group">
+      <label for="odpPerOdc">ODP per ODC:</label>
+      <select id="odpPerOdc">
+        <option value="4">4</option>
+        <option value="8">8</option>
+        <option value="12">12</option>
+        <option value="16">16</option>
+      </select>
+    </div>
+
+    <div class="control-group">
+      <button id="processBtn">Proses</button>
+      <button id="exportKmlBtn" disabled>Export KML</button>
+      <button id="exportKmzBtn" disabled>Export KMZ</button>
+      <button id="exportPdfBtn" disabled>Export PDF</button>
+    </div>
+  </section>
+
+  <div id="map"></div>
+
+  <section class="summary">
+    <h2>Ringkasan Material</h2>
+    <div id="summaryContent">Belum ada data. Silakan upload dan proses.</div>
+  </section>
+
+  <script src="/vendor/leaflet/dist/leaflet.js"></script>
+  <script src="/vendor/jszip/dist/jszip.min.js"></script>
+  <script src="/vendor/file-saver/dist/FileSaver.min.js"></script>
+  <script src="/vendor/jspdf/dist/jspdf.umd.min.js"></script>
+  <script src="/vendor/@turf/turf/turf.min.js"></script>
+  <script src="/vendor/togeojson/togeojson.js"></script>
+  <script src="/app.js"></script>
+</body>
+</html>
