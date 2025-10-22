@@ -108,3 +108,11 @@ Jika perlu autentikasi, gunakan Personal Access Token (PAT) atau `gh auth login`
 - Lihat rilis: https://github.com/erlangh/ftth-kalkulator/releases
 - Rilis awal: `v1.0.0` — https://github.com/erlangh/ftth-kalkulator/releases/tag/v1.0.0
 - Changelog: lihat `CHANGELOG.md` di repo.
+
+### Rilis Otomatis (CI)
+- Setiap push tag `v*` (mis. `v1.0.1`) akan memicu GitHub Actions untuk:
+  - Membangun arsip ZIP berisi `server.js`, `package.json`, `Dockerfile`, `README.md`, `CHANGELOG.md`, dan folder `public/`.
+  - Membuat Release di GitHub dengan nama `FTTH Kalkulator <tag>` dan melampirkan ZIP sebagai asset.
+- Cara memicu:
+  - Pastikan branch `main` bersih lalu dorong tag: `git tag v1.0.1 -m "FTTH Kalkulator v1.0.1" && git push origin v1.0.1`.
+  - Workflow: `.github/workflows/release.yml`.

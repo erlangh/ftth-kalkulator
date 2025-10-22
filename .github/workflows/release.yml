@@ -1,0 +1,36 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Create release zip
+        run: |
+          mkdir -p dist
+          zip -r "dist/FTTH-Kalkulator-${{ github.ref_name }}.zip" \
+            server.js package.json package-lock.json Dockerfile README.md CHANGELOG.md public/
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: FTTH Kalkulator ${{ github.ref_name }}
+          files: |
+            dist/FTTH-Kalkulator-${{ github.ref_name }}.zip
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
