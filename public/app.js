@@ -51,6 +51,7 @@ const odpPerOdcEl = document.getElementById('odpPerOdc');
 const summaryContent = document.getElementById('summaryContent');
 const exportXlsxBtn = document.getElementById('exportXlsxBtn');
 const odcSnapModeEl = document.getElementById('odcSnapMode');
+const showLabelsEl = document.getElementById('showLabels');
 
 poleTypeEl.addEventListener('change', () => state.material.poleType = poleTypeEl.value);
 poleSpacingEl.addEventListener('change', () => state.material.poleSpacing = Number(poleSpacingEl.value));
@@ -67,6 +68,11 @@ state.odcSnapMode = state.odcSnapMode || 'nearest';
 if (odcSnapModeEl) odcSnapModeEl.value = state.odcSnapMode;
 if (odcSnapModeEl) odcSnapModeEl.addEventListener('change', () => {
   state.odcSnapMode = odcSnapModeEl.value || 'nearest';
+});
+state.showLabels = !!state.showLabels;
+if (showLabelsEl) showLabelsEl.checked = !!state.showLabels;
+if (showLabelsEl) showLabelsEl.addEventListener('change', () => {
+  state.showLabels = !!showLabelsEl.checked;
 });
 
 function populateFeederNameOptions(geojson) {
@@ -172,8 +178,14 @@ exportPdfBtn.addEventListener('click', () => {
 function renderUploaded() {
   // Clear old layers
   clearLayers();
+  let odcIdx = 0;
   const odcLayer = L.geoJSON({ type: 'FeatureCollection', features: state.odcPoints }, {
-    pointToLayer: (f, latlng) => L.circleMarker(latlng, { radius: 6, color: '#004aad', fillColor: '#4ea3ff', fillOpacity: 0.8 })
+    pointToLayer: (f, latlng) => L.circleMarker(latlng, { radius: 6, color: '#004aad', fillColor: '#4ea3ff', fillOpacity: 0.8 }),
+    onEachFeature: (f, layer) => {
+      if (state.showLabels) {
+        layer.bindTooltip(`ODC ${++odcIdx}`, { permanent: true, direction: 'top', className: 'label-s' });
+      }
+    }
   }).addTo(map);
   const feederLayer = L.geoJSON({ type: 'FeatureCollection', features: state.feederLines }, {
     style: () => ({ color: '#ff6b00', weight: 3 })
@@ -192,8 +204,14 @@ function renderComputed() {
     pointToLayer: (f, latlng) => L.circleMarker(latlng, { radius: 4, color: '#333', fillColor: '#aaa', fillOpacity: 1 })
   }).addTo(map);
 
+  let odpIdx = 0;
   state.layers.odp = L.geoJSON({ type: 'FeatureCollection', features: state.odps }, {
-    pointToLayer: (f, latlng) => L.circleMarker(latlng, { radius: 5, color: '#0b5', fillColor: '#7fda8f', fillOpacity: 0.9 })
+    pointToLayer: (f, latlng) => L.circleMarker(latlng, { radius: 5, color: '#0b5', fillColor: '#7fda8f', fillOpacity: 0.9 }),
+    onEachFeature: (f, layer) => {
+      if (state.showLabels) {
+        layer.bindTooltip(`ODP ${++odpIdx}`, { permanent: true, direction: 'top', className: 'label-s' });
+      }
+    }
   }).addTo(map);
 
   state.layers.dist = L.geoJSON({ type: 'FeatureCollection', features: state.distLines }, {
